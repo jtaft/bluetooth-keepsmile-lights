@@ -51,17 +51,7 @@ function onButtonClick(command) {
   let filters = [];
   document.getElementById("log").innerHTML = "";
 
-  var device = navigator.bluetooth.getDevices().then(devices => {
-    // Filter on saved devices
-    for(let device of devices) {
-      if (device.name == 'KS03~791C47') {
-        insertLog('Device: ' + device.name);
-        insertLog('Device id: ' + device.id);
-        return device.gatt.connect();
-      }
-    }
-    // If no saved device found, prompt for new device
-    insertLog('No saved device found, prompting for new device...');
+  function promptForDevice(){
     return new Promise(function (resolve, reject){
       let options = {
         filters: [
@@ -80,7 +70,30 @@ function onButtonClick(command) {
         device.gatt.connect().then(resolve, reject);
       }, reject);
     });
-  }).then(function(server) {
+  }
+
+  var device = navigator.bluetooth.getDevices().then(devices => {
+    // Filter on saved devices
+    for(let device of devices) {
+      if (device.name == 'KS03~791C47') {
+        insertLog('Device: ' + device.name);
+        insertLog('Device id: ' + device.id);
+        return device.gatt.connect();
+      }
+    }
+    insertLog('No saved device found, prompting for new device...');
+    // If no saved device found, prompt for new device
+    return promptForDevice();
+  }).catch(error => {
+    if (error.toString().includes('NetworkError: Bluetooth Device is no longer in range')) {
+      insertLog('Device permission failed, prompting for new device...');
+      return promptForDevice();
+    } else {
+      return Promise.reject(error);
+    }
+  });
+
+  device.then(function(server) {
     var onError = function(error) {
       insertLog('Internal! ' + error);
       server.disconnect();
@@ -118,8 +131,7 @@ var formHtml = "<form onsubmit=\"return false\">" +
   "<button style=\"width:50vw;height:5vh;margin-bottom:5vh;\" onclick=\"lightsOnClick()\">Lights ON</button>" +
   "<button style=\"width:50vw;height:5vh;\" onclick=\"lightsOffClick()\">Lights OFF</button>" +
 "</form>" +
-"<script>" + hexStr2Bytes.toString() + byteToUint8Array.toString() + variables + lightsOffClick.toString() + lightsOnClick.toString() + onButtonClick.toString() + "</script>" +
-"<script>" + insertLog.toString() + "</script>";
+"<script>" + hexStr2Bytes.toString() + byteToUint8Array.toString() + variables + lightsOffClick.toString() + lightsOnClick.toString() + onButtonClick.toString() + insertLog.toString() + "</script>";
 
 
 var outputHtml = "<div id=\"output\" class=\"output\">" +
