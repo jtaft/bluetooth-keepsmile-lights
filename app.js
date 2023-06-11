@@ -1,6 +1,15 @@
 const express = require('express')
+var bodyParser = require('body-parser')
 const https = require('https');
 const fs = require('fs');
+
+ var jsonParser = bodyParser.json()
+
+require('chromedriver');
+const webdriver = require('selenium-webdriver');
+var chrome = require("selenium-webdriver/chrome");
+
+
 const app = express()
 const port = 3000
 
@@ -49,6 +58,13 @@ function insertLog(msg){
 }
 function onButtonClick(command) {
   let filters = [];
+  var timeout = false;
+  try {
+    timeout = document.getElementById("timeout").innerHTML == "true"
+  } catch (error) {
+    timeout = false;
+  }
+
   document.getElementById("log").innerHTML = "";
 
   function promptForDevice(){
@@ -63,41 +79,92 @@ function onButtonClick(command) {
         optionalServices: [SERVICE_UUID]
       };
       console.log(navigator.bluetooth);
+
       navigator.bluetooth.requestDevice(options)
       .then(device => {
         insertLog('> Name:             ' + device.name);
         insertLog('> Id:               ' + device.id);
-        device.gatt.connect().then(resolve, reject);
-      }, reject);
+        resolve(device);
+      }, reject).catch(reject);
+      if (timeout) {
+        setTimeout(function(){
+          insertLog('Timeout');
+          return resolve();
+        }, 5000)
+      }
+    });
+  }
+  function connectDevice(d){
+    return d.gatt.connect().then(server => {
+      if (server != undefined) {
+        write(server);
+      } else {
+        insertLog('No device found');
+        insertLog(d)
+      }
+    }).catch(error => {
+      if (error.toString().includes('NetworkError: Bluetooth Device is no longer in range')) {
+        if (retry == false) {
+          retry = true;
+          setTimeout(function(){
+            insertLog('Device permission failed, retrying...');
+
+            if (command == LIGHTS_ON_STRING) {
+              document.getElementById("lightsON").click();
+            } else if (command == LIGHTS_OFF_STRING) {
+              document.getElementById("lightsOFF").click();
+            }
+
+            return Promise.reject(error);
+          }, 2000);
+        } else {
+          insertLog('Device permission failed, no retry.');
+          return promptForDevice().then(function(d) {
+            return connectDevice(d);
+          });
+        }
+      } else {
+        return Promise.reject(error);
+      }
     });
   }
 
-  var device = navigator.bluetooth.getDevices().then(devices => {
-    // Filter on saved devices
-    for(let device of devices) {
-      if (device.name == 'KS03~791C47') {
-        insertLog('Device: ' + device.name);
-        insertLog('Device id: ' + device.id);
-        return device.gatt.connect();
+  var device;
+  if (navigator.bluetooth.getDevices != undefined) {
+    insertLog('getDevices found');
+    device = navigator.bluetooth.getDevices().then(devices => {
+      for(let device of devices) {
+        if (device.name == 'KS03~791C47') {
+          insertLog('Device: ' + device.name);
+          insertLog('Device id: ' + device.id);
+          return Promise.resolve(device);
+        }
       }
-    }
-    insertLog('No saved device found, prompting for new device...');
-    // If no saved device found, prompt for new device
-    return promptForDevice();
-  }).catch(error => {
-    if (error.toString().includes('NetworkError: Bluetooth Device is no longer in range')) {
-      insertLog('Device permission failed, prompting for new device...');
+      insertLog('No saved device found, prompting for new device...');
+      timeout = false;
       return promptForDevice();
-    } else {
-      return Promise.reject(error);
-    }
-  });
+    });
+    device.then(function(d) {
+      //if getDevices returned the device promptForDevice shouldn't be needed, but it seems it is for some reason so we're calling it with a timeout just to scan devices so it doesn't error out
+      if (timeout) {
+        promptForDevice().then(function() {
+          connectDevice(d);
+        });
+      } else {
+        connectDevice(d);
+      }
+    })
+  } else {
+    insertLog('getDevices not found');
+    //device = promptForDevice();
+  }
 
-  device.then(function(server) {
+  function write(server) {
     var onError = function(error) {
       insertLog('Internal! ' + error);
       server.disconnect();
     }
+    insertLog(server);
     insertLog('> Connected:        ' + server.connected);
     insertLog('Getting Services...');
     server.getPrimaryService(SERVICE_UUID).then(service => {
@@ -107,16 +174,14 @@ function onButtonClick(command) {
       var bytecommand = byteToUint8Array(hexStr2Bytes(command));
       characteristic.writeValueWithoutResponse(bytecommand).then(() => {
         if (command == LIGHTS_ON_STRING) {
-          insertLog('Lights ON');
+          insertLog('lightsON');
         } else if (command == LIGHTS_OFF_STRING) {
-          insertLog('Lights OFF');
+          insertLog('lightsOFF');
         }
         server.disconnect();
       }, onError);
     }, onError);
-  }).catch(error => {
-    insertLog('Argh! ' + error);
-  });
+  }
 }
 function lightsOnClick() {
   onButtonClick(LIGHTS_ON_STRING);
@@ -124,14 +189,25 @@ function lightsOnClick() {
 function lightsOffClick() {
   onButtonClick(LIGHTS_OFF_STRING);
 }
-var variables = `var CHARACTERISTIC_READ_UUID = "${CHARACTERISTIC_READ_UUID}";var CHARACTERISTIC_WRITE_UUID = "${CHARACTERISTIC_WRITE_UUID}";var CHARACTERISTIC_NOTIFY_UUID = "${CHARACTERISTIC_NOTIFY_UUID}"; var SERVICE_UUID = "${SERVICE_UUID}"; var LIGHTS_ON_STRING = "${LIGHTS_ON_STRING}";var LIGHTS_OFF_STRING = "${LIGHTS_OFF_STRING}";`;
+
+
+function eventListener() {
+  console.log('Adding event listener...');
+  window.document.addEventListener('onadvertisementreceived', console.log);/* function(event, deviceList, callback) {
+    console.log('select-bluetooth-device called');
+  });*/
+  window.addEventListener('storage', console.log);
+  window.addEventListener('load', console.log);
+  window.addEventListener('open', console.log);
+}
+var variables = `var retry = false; var CHARACTERISTIC_READ_UUID = "${CHARACTERISTIC_READ_UUID}";var CHARACTERISTIC_WRITE_UUID = "${CHARACTERISTIC_WRITE_UUID}";var CHARACTERISTIC_NOTIFY_UUID = "${CHARACTERISTIC_NOTIFY_UUID}"; var SERVICE_UUID = "${SERVICE_UUID}"; var LIGHTS_ON_STRING = "${LIGHTS_ON_STRING}";var LIGHTS_OFF_STRING = "${LIGHTS_OFF_STRING}";`;
 
 
 var formHtml = "<form onsubmit=\"return false\">" +
-  "<button style=\"width:50vw;height:5vh;margin-bottom:5vh;\" onclick=\"lightsOnClick()\">Lights ON</button>" +
-  "<button style=\"width:50vw;height:5vh;\" onclick=\"lightsOffClick()\">Lights OFF</button>" +
+  "<button id=\"lightsON\" style=\"width:50vw;height:5vh;margin-bottom:5vh;\" onclick=\"lightsOnClick()\">Lights ON</button>" +
+  "<button id=\"lightsOFF\" style=\"width:50vw;height:5vh;\" onclick=\"lightsOffClick()\">Lights OFF</button>" +
 "</form>" +
-"<script>" + hexStr2Bytes.toString() + byteToUint8Array.toString() + variables + lightsOffClick.toString() + lightsOnClick.toString() + onButtonClick.toString() + insertLog.toString() + "</script>";
+"<script>" + hexStr2Bytes.toString() + byteToUint8Array.toString() + variables + lightsOffClick.toString() + lightsOnClick.toString() + onButtonClick.toString() + insertLog.toString() + ";" + eventListener.toString() + ";eventListener();</script>";
 
 
 var outputHtml = "<div id=\"output\" class=\"output\">" +
@@ -141,11 +217,112 @@ var outputHtml = "<div id=\"output\" class=\"output\">" +
 "</div>";
 
 
+//javascript function to use chromedriver to open localhost in chrome and click the lights on button
+function openChrome(command) {
+  var options = new chrome.Options();
+
+  //var chromeCapabilities = webdriver.Capabilities.chrome();
+  ////setting chrome options to start the browser fully maximized
+  //var chromeOptions = {
+  //    'args': ['--ignore-ssl-errors=yes','--ignore-certificate-errors']
+  //};
+  //chromeCapabilities.set('chromeOptions', chromeOptions);
+
+  options.addArguments('--ignore-ssl-errors=yes');
+  options.addArguments('--ignore-certificate-errors');
+
+  //options.addArguments('--flag-switches-begin --enable-experimental-web-platform-features --enable-features=WebBluetoothNewPermissionsBackend --flag-switches-end');
+  /*
+  options.addArguments('enable-experimental-web-platform-features@1')
+  options.addArguments('enable-web-bluetooth-new-permissions-backend@1')
+  */
+
+  //chrome://version/
+  //C:\Users\Jay\AppData\Local\Google\Chrome\User Data\Default
+  options.addArguments("user-data-dir=C:\\Users\\Jay\\AppData\\Local\\Google\\Chrome\\User Data\\Default");
+
+
+
+
+
+  //options.addArguments(['--ignore-ssl-errors=yes','--ignore-certificate-errors']);
+  //driver = webdriver.Chrome(options=options)
+  var driver = new webdriver.Builder()
+    .forBrowser('chrome')
+    .setChromeOptions(options)
+    .build();
+
+
+
+ // driver.get('chrome://flags')
+ // driver.executeScript("chrome.send('enableExperimentalFeature', ['enable-experimental-web-platform-features', 'true'])")
+ // driver.executeScript("chrome.send('enableExperimentalFeature', ['enable-web-bluetooth-new-permissions-backend', 'true'])")
+
+
+  driver.get('https://localhost:3000');
+  //wait for page to load
+
+
+  var query = driver.wait(webdriver.until.elementLocated(webdriver.By.id(command)));
+
+  driver.executeScript("var timeout = document.createElement('div'); timeout.id = 'timeout'; timeout.innerHTML = 'true'; document.body.append(timeout);");
+
+  query.click().then(function() {
+
+    setTimeout(function() {
+      driver.findElement(webdriver.By.id('log')).then(function(element) {
+        element.getAttribute('innerHTML').then(function(text) {
+          if(text.includes(command)) {
+            driver.quit();
+          }
+        });
+      });
+    }, 10000);
+    //Convert java wait command to javascript
+    //driver.manage().timeouts().implicitlyWait(10, TimeUnit.SECONDS);
+    //driver.sleep(4000).then(function() {
+
+      //driver.switchTo().alert().then(function(alert) {
+        //driver.executeScript('console.log(window);')
+        //query.sendKeys(webdriver.Key.TAB).then(function() {
+        //  query.sendKeys(webdriver.Key.TAB);
+        //});
+      //});
+    //driver.keys(Keys.TAB);
+    //driver.keys(Keys.ENTER);
+    //});
+  });
+
+  //driver.wait(function() {
+  //  return driver.executeScript('return document.readyState').then(function(readyState) {
+  //    return readyState === 'complete';
+  //  });
+  //});
+  //console.log(driver.findElement(webdriver.By.id('details-button')));
+  //driver.findElement(webdriver.By.id('details-button')).click();
+  //driver.findElement(webdriver.By.id('proceed-link')).click();
+
+  //driver.findElement(webdriver.By.id('lightsOn')).click();
+
+  //driver.quit();
+}
+
+
+
+
 app.get('/', (req, res) => {
   res.send(formHtml + outputHtml);
-})
+});
+
+app.post('/', jsonParser, (req, res) => {
+  console.log('POST request received');
+  console.log(req.body);
+  openChrome(req.body.command);
+
+  res.send("OK");
+});
 
 var server = https.createServer(options, app);
 server.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
-})
+});
