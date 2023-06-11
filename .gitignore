@@ -1,0 +1,7 @@
+selfsigned.crt
+selfsigned.key
+*.swp
+node_modules
+*.swo
+*.code-workspace
+package-lock.json
