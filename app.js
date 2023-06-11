@@ -3,7 +3,9 @@ var bodyParser = require('body-parser')
 const https = require('https');
 const fs = require('fs');
 
- var jsonParser = bodyParser.json()
+var chromeUserDataDir = "C:\\Users\\Jay\\AppData\\Local\\Google\\Chrome\\User Data\\Default";
+
+var jsonParser = bodyParser.json()
 
 require('chromedriver');
 const webdriver = require('selenium-webdriver');
@@ -145,7 +147,6 @@ function onButtonClick(command) {
       return promptForDevice();
     });
     device.then(function(d) {
-      //if getDevices returned the device promptForDevice shouldn't be needed, but it seems it is for some reason so we're calling it with a timeout just to scan devices so it doesn't error out
       if (timeout) {
         promptForDevice().then(function() {
           connectDevice(d);
@@ -156,7 +157,6 @@ function onButtonClick(command) {
     })
   } else {
     insertLog('getDevices not found');
-    //device = promptForDevice();
   }
 
   function write(server) {
@@ -183,25 +183,24 @@ function onButtonClick(command) {
     }, onError);
   }
 }
+
 function lightsOnClick() {
   onButtonClick(LIGHTS_ON_STRING);
 }
+
 function lightsOffClick() {
   onButtonClick(LIGHTS_OFF_STRING);
 }
 
-
 function eventListener() {
   console.log('Adding event listener...');
-  window.document.addEventListener('onadvertisementreceived', console.log);/* function(event, deviceList, callback) {
-    console.log('select-bluetooth-device called');
-  });*/
+  window.document.addEventListener('onadvertisementreceived', console.log);
   window.addEventListener('storage', console.log);
   window.addEventListener('load', console.log);
   window.addEventListener('open', console.log);
 }
-var variables = `var retry = false; var CHARACTERISTIC_READ_UUID = "${CHARACTERISTIC_READ_UUID}";var CHARACTERISTIC_WRITE_UUID = "${CHARACTERISTIC_WRITE_UUID}";var CHARACTERISTIC_NOTIFY_UUID = "${CHARACTERISTIC_NOTIFY_UUID}"; var SERVICE_UUID = "${SERVICE_UUID}"; var LIGHTS_ON_STRING = "${LIGHTS_ON_STRING}";var LIGHTS_OFF_STRING = "${LIGHTS_OFF_STRING}";`;
 
+var variables = `var retry = false; var CHARACTERISTIC_READ_UUID = "${CHARACTERISTIC_READ_UUID}";var CHARACTERISTIC_WRITE_UUID = "${CHARACTERISTIC_WRITE_UUID}";var CHARACTERISTIC_NOTIFY_UUID = "${CHARACTERISTIC_NOTIFY_UUID}"; var SERVICE_UUID = "${SERVICE_UUID}"; var LIGHTS_ON_STRING = "${LIGHTS_ON_STRING}";var LIGHTS_OFF_STRING = "${LIGHTS_OFF_STRING}";`;
 
 var formHtml = "<form onsubmit=\"return false\">" +
   "<button id=\"lightsON\" style=\"width:50vw;height:5vh;margin-bottom:5vh;\" onclick=\"lightsOnClick()\">Lights ON</button>" +
@@ -217,51 +216,20 @@ var outputHtml = "<div id=\"output\" class=\"output\">" +
 "</div>";
 
 
-//javascript function to use chromedriver to open localhost in chrome and click the lights on button
 function openChrome(command) {
   var options = new chrome.Options();
-
-  //var chromeCapabilities = webdriver.Capabilities.chrome();
-  ////setting chrome options to start the browser fully maximized
-  //var chromeOptions = {
-  //    'args': ['--ignore-ssl-errors=yes','--ignore-certificate-errors']
-  //};
-  //chromeCapabilities.set('chromeOptions', chromeOptions);
 
   options.addArguments('--ignore-ssl-errors=yes');
   options.addArguments('--ignore-certificate-errors');
 
-  //options.addArguments('--flag-switches-begin --enable-experimental-web-platform-features --enable-features=WebBluetoothNewPermissionsBackend --flag-switches-end');
-  /*
-  options.addArguments('enable-experimental-web-platform-features@1')
-  options.addArguments('enable-web-bluetooth-new-permissions-backend@1')
-  */
+  options.addArguments("user-data-dir=" + chromeUserDataDir);
 
-  //chrome://version/
-  //C:\Users\Jay\AppData\Local\Google\Chrome\User Data\Default
-  options.addArguments("user-data-dir=C:\\Users\\Jay\\AppData\\Local\\Google\\Chrome\\User Data\\Default");
-
-
-
-
-
-  //options.addArguments(['--ignore-ssl-errors=yes','--ignore-certificate-errors']);
-  //driver = webdriver.Chrome(options=options)
   var driver = new webdriver.Builder()
     .forBrowser('chrome')
     .setChromeOptions(options)
     .build();
 
-
-
- // driver.get('chrome://flags')
- // driver.executeScript("chrome.send('enableExperimentalFeature', ['enable-experimental-web-platform-features', 'true'])")
- // driver.executeScript("chrome.send('enableExperimentalFeature', ['enable-web-bluetooth-new-permissions-backend', 'true'])")
-
-
   driver.get('https://localhost:3000');
-  //wait for page to load
-
 
   var query = driver.wait(webdriver.until.elementLocated(webdriver.By.id(command)));
 
@@ -278,37 +246,8 @@ function openChrome(command) {
         });
       });
     }, 10000);
-    //Convert java wait command to javascript
-    //driver.manage().timeouts().implicitlyWait(10, TimeUnit.SECONDS);
-    //driver.sleep(4000).then(function() {
-
-      //driver.switchTo().alert().then(function(alert) {
-        //driver.executeScript('console.log(window);')
-        //query.sendKeys(webdriver.Key.TAB).then(function() {
-        //  query.sendKeys(webdriver.Key.TAB);
-        //});
-      //});
-    //driver.keys(Keys.TAB);
-    //driver.keys(Keys.ENTER);
-    //});
   });
-
-  //driver.wait(function() {
-  //  return driver.executeScript('return document.readyState').then(function(readyState) {
-  //    return readyState === 'complete';
-  //  });
-  //});
-  //console.log(driver.findElement(webdriver.By.id('details-button')));
-  //driver.findElement(webdriver.By.id('details-button')).click();
-  //driver.findElement(webdriver.By.id('proceed-link')).click();
-
-  //driver.findElement(webdriver.By.id('lightsOn')).click();
-
-  //driver.quit();
 }
-
-
-
 
 app.get('/', (req, res) => {
   res.send(formHtml + outputHtml);
