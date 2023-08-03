@@ -2,6 +2,7 @@ const express = require('express')
 var bodyParser = require('body-parser')
 const https = require('https');
 const fs = require('fs');
+const os = require('os');
 
 var chromeUserDataDir = "C:\\Users\\Jay\\AppData\\Local\\Google\\Chrome\\User Data\\Default";
 
@@ -53,6 +54,21 @@ function hexStr2Bytes(str) {
   }
   return bArr;
 }
+
+
+function getHex(number) {
+  var hex = number.toString(16);
+  if (hex.length == 1) {
+    hex = "0" + hex;
+  }
+  return hex.toUpperCase();
+}
+
+function getColorCommand(red, green, blue, brightness) {
+  //brightness = 0-100
+  return "5A0001" + getHex(red) + getHex(green) + getHex(blue) + "00" + getHex(brightness) + "00A5";
+}
+
 
 function insertLog(msg){
   console.log(msg);
@@ -192,6 +208,15 @@ function lightsOffClick() {
   onButtonClick(LIGHTS_OFF_STRING);
 }
 
+function lightsRedClick() {
+  onButtonClick(getColorCommand(255, 0, 0, 100));
+}
+
+function lightsSoftWhiteClick() {
+  onButtonClick(getColorCommand(224, 75, 22, 100));
+}
+
+
 function eventListener() {
   console.log('Adding event listener...');
   window.document.addEventListener('onadvertisementreceived', console.log);
@@ -205,8 +230,10 @@ var variables = `var retry = false; var CHARACTERISTIC_READ_UUID = "${CHARACTERI
 var formHtml = "<form onsubmit=\"return false\">" +
   "<button id=\"lightsON\" style=\"width:50vw;height:5vh;margin-bottom:5vh;\" onclick=\"lightsOnClick()\">Lights ON</button>" +
   "<button id=\"lightsOFF\" style=\"width:50vw;height:5vh;\" onclick=\"lightsOffClick()\">Lights OFF</button>" +
+  "<button id=\"lightsRED\" style=\"width:50vw;height:5vh;\" onclick=\"lightsRedClick()\">Lights RED</button>" +
+  "<button id=\"lightsSoftWhite\" style=\"width:50vw;height:5vh;\" onclick=\"lightsSoftWhiteClick()\">Lights Soft White</button>" +
 "</form>" +
-"<script>" + hexStr2Bytes.toString() + byteToUint8Array.toString() + variables + lightsOffClick.toString() + lightsOnClick.toString() + onButtonClick.toString() + insertLog.toString() + ";" + eventListener.toString() + ";eventListener();</script>";
+"<script>" + hexStr2Bytes.toString() + byteToUint8Array.toString() + variables + lightsOffClick.toString() + lightsOnClick.toString() + lightsRedClick.toString() + lightsSoftWhiteClick.toString() + getColorCommand.toString() + getHex.toString() + onButtonClick.toString() + insertLog.toString() + ";" + eventListener.toString() + ";eventListener();</script>";
 
 
 var outputHtml = "<div id=\"output\" class=\"output\">" +
@@ -262,6 +289,10 @@ app.post('/', jsonParser, (req, res) => {
 });
 
 var server = https.createServer(options, app);
+
 server.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
+  //print hostname ip addresses
+  console.log(Object.values(require('os').networkInterfaces()).reduce((r, list) => r.concat(list.reduce((rr, i) => rr.concat(i.family==='IPv4' && !i.internal && i.address || []), [])), []));
+
 });
